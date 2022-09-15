@@ -47,7 +47,8 @@ AceButton button(BUTTON_PIN);
 // Forward reference to prevent Arduino compiler becoming confused.
 void handleEvent(AceButton*, uint8_t, uint8_t);
 
-Ticker voltageMonitor;
+Ticker voltageMonitorTicker;
+Ticker brightnessAdjustTicker;
 
 // Declare our NeoPixel strip object:
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(PIXEL_COUNT, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
@@ -87,15 +88,15 @@ void initWiFi() {
 
 String getOutputStates() {
   JSONVar myArray;
-//  for (int i = 0; i < NUM_OUTPUTS; i++) {
-//    myArray["gpios"][i]["output"] = String(outputGPIOs[i]);
-//    myArray["gpios"][i]["state"] = String(digitalRead(outputGPIOs[i]));
-//  }
+  //  for (int i = 0; i < NUM_OUTPUTS; i++) {
+  //    myArray["gpios"][i]["output"] = String(outputGPIOs[i]);
+  //    myArray["gpios"][i]["state"] = String(digitalRead(outputGPIOs[i]));
+  //  }
   myArray["gpios"][0]["output"] = String(PIXEL_PIN);
-//  myArray["gpios"][0]["state"] = String(strip.getPixelColor(0);
+  //  myArray["gpios"][0]["state"] = String(strip.getPixelColor(0);
   myArray["gpios"][0]["state"] = ledState;
-  myArray["gpios"][0]["color"][0] = (uint8_t)(strip.getPixelColor(0)>>16);
-  myArray["gpios"][0]["color"][1] = (uint8_t)(strip.getPixelColor(0)>>8);
+  myArray["gpios"][0]["color"][0] = (uint8_t)(strip.getPixelColor(0) >> 16);
+  myArray["gpios"][0]["color"][1] = (uint8_t)(strip.getPixelColor(0) >> 8);
   myArray["gpios"][0]["color"][2] = (uint8_t)(strip.getPixelColor(0));
   myArray["voltage"] = getVoltage();
   String jsonString = JSON.stringify(myArray);
@@ -104,16 +105,16 @@ String getOutputStates() {
 
 String getDeviceStates() {
   JSONVar myArray;
-//  for (int i = 0; i < NUM_OUTPUTS; i++) {
-//    myArray["gpios"][i]["output"] = String(outputGPIOs[i]);
-//    myArray["gpios"][i]["state"] = String(digitalRead(outputGPIOs[i]));
-//  }
-//  myArray["gpios"][0]["output"] = String(PIXEL_PIN);
-//  myArray["gpios"][0]["state"] = String(strip.getPixelColor(0);
-//  myArray["gpios"][0]["state"] = ledState;
-//  myArray["gpios"][0]["color"][0] = (uint8_t)(strip.getPixelColor(0)>>16);
-//  myArray["gpios"][0]["color"][1] = (uint8_t)(strip.getPixelColor(0)>>8);
-//  myArray["gpios"][0]["color"][2] = (uint8_t)(strip.getPixelColor(0));
+  //  for (int i = 0; i < NUM_OUTPUTS; i++) {
+  //    myArray["gpios"][i]["output"] = String(outputGPIOs[i]);
+  //    myArray["gpios"][i]["state"] = String(digitalRead(outputGPIOs[i]));
+  //  }
+  //  myArray["gpios"][0]["output"] = String(PIXEL_PIN);
+  //  myArray["gpios"][0]["state"] = String(strip.getPixelColor(0);
+  //  myArray["gpios"][0]["state"] = ledState;
+  //  myArray["gpios"][0]["color"][0] = (uint8_t)(strip.getPixelColor(0)>>16);
+  //  myArray["gpios"][0]["color"][1] = (uint8_t)(strip.getPixelColor(0)>>8);
+  //  myArray["gpios"][0]["color"][2] = (uint8_t)(strip.getPixelColor(0));
   myArray["voltage"] = getVoltage();
   String jsonString = JSON.stringify(myArray);
   return jsonString;
@@ -133,22 +134,59 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
     }
     else {
       int gpio = atoi((char*)data);
-//      digitalWrite(gpio, !digitalRead(gpio));
+      //      digitalWrite(gpio, !digitalRead(gpio));
       toggleLED();
-      notifyClients(getOutputStates());      
+      notifyClients(getOutputStates());
     }
   }
 }
 
+uint8 brightnessColor[3] = {254, 254, 254};
+
 void toggleLED() {
 
   if (ledState == 0) {
-    led_set(10, 10, 10);
+    led_set(brightnessColor[0], brightnessColor[1], brightnessColor[2]);
     ledState = 1;
   } else {
     led_set(0, 0, 0);
     ledState = 0;
   }
+}
+
+bool brightnessDirection = false;
+bool longPressed = false;
+
+void longPress() {
+  longPressed = true;
+}
+
+void adjustBrightness() {
+  if (!longPressed){
+    return;
+  }
+  if (!ledState){
+    return;
+  }
+  if (brightnessDirection == true) {
+    if (brightnessColor[0] < 254) {
+      brightnessColor[0] = brightnessColor[0] + 1;
+      brightnessColor[1] = brightnessColor[1] + 1;
+      brightnessColor[2] = brightnessColor[2] + 1;
+    }
+  }
+  else if (brightnessColor[0] > 1) {
+    brightnessColor[0] = brightnessColor[0] - 1;
+    brightnessColor[1] = brightnessColor[1] - 1;
+    brightnessColor[2] = brightnessColor[2] - 1;
+  }
+
+  led_set(brightnessColor[0], brightnessColor[1], brightnessColor[2]);
+}
+
+void adjustBrightnessDirection() {
+  brightnessDirection = !brightnessDirection;
+  longPressed = false;
 }
 
 void led_set(uint8 R, uint8 G, uint8 B) {
@@ -186,11 +224,11 @@ void setup() {
   Serial.begin(115200);
 
   // Set GPIOs as outputs
-//  for (int i = 0; i < NUM_OUTPUTS; i++) {
-//    pinMode(outputGPIOs[i], OUTPUT);
-//  }
+  //  for (int i = 0; i < NUM_OUTPUTS; i++) {
+  //    pinMode(outputGPIOs[i], OUTPUT);
+  //  }
   strip.begin(); // Initialize NeoPixel strip object (REQUIRED)
-  led_set(0,0,0);
+  led_set(0, 0, 0);
   ledState = 0;
   pinMode(BUTTON_PIN, INPUT_PULLUP);
 
@@ -201,11 +239,13 @@ void setup() {
   buttonConfig->setFeature(ButtonConfig::kFeatureClick);
   buttonConfig->setFeature(ButtonConfig::kFeatureDoubleClick);
   buttonConfig->setFeature(ButtonConfig::kFeatureLongPress);
+  buttonConfig->setFeature(ButtonConfig::kFeatureSuppressAfterLongPress);
   buttonConfig->setFeature(ButtonConfig::kFeatureRepeatPress);
-  
+
   button.setEventHandler(handleEvent);
 
-  voltageMonitor.attach(10, handleVoltages);
+  voltageMonitorTicker.attach(10, handleVoltages);
+  brightnessAdjustTicker.attach_ms(10, adjustBrightness);
   initLittleFS();
   initWiFi();
   initWebSocket();
@@ -227,22 +267,30 @@ void setup() {
 void loop() {
   ws.cleanupClients();
   button.check();
-//  Serial.println(getVoltage());
+  //  Serial.println(getVoltage());
 }
 
-float getVoltage(){
+float getVoltage() {
   int analogReading = analogRead(ANALOG_PIN);
-//  VanalogReading/1024 = (Vbatt * 100) / 450
-//  (Vread*450)/(1024*100) = Vbatt
-//  float Vout = ((float)analogReading * 0.00439453125);
-  float Vout = analogReading*4.45/1024.0;
+  //  VanalogReading/1024 = (Vbatt * 100) / 450
+  //  (Vread*450)/(1024*100) = Vbatt
+  //  float Vout = ((float)analogReading * 0.00439453125);
+  float Vout = analogReading * 4.45 / 1024.0;
   return Vout;
 }
 
 void handleEvent(AceButton*, uint8_t eventType, uint8_t) {
   switch (eventType) {
-    case AceButton::kEventPressed:
+    case AceButton::kEventReleased:
       toggleLED();
+      notifyClients(getOutputStates());
+      break;
+    case AceButton::kEventLongPressed:
+      longPress();
+      notifyClients(getOutputStates());
+      break;
+    case AceButton::kEventLongReleased:
+      adjustBrightnessDirection();
       notifyClients(getOutputStates());
       break;
   }
@@ -250,5 +298,5 @@ void handleEvent(AceButton*, uint8_t eventType, uint8_t) {
 
 void handleVoltages()
 {
-notifyClients(getDeviceStates());
+  notifyClients(getDeviceStates());
 }
